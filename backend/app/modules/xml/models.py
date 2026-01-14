@@ -34,6 +34,7 @@ class Invoice(db.Model):
     # Relationship: One Invoice -> Many Items
     items = db.relationship('InvoiceItem', backref='invoice', lazy=True, cascade='all, delete-orphan')
 
+
     def to_dict(self):
         taxes_dict = {}
         if self.json_taxes:
@@ -52,10 +53,12 @@ class Invoice(db.Model):
             'receiver_name': self.receiver_name,
             'total_amount': float(self.total_amount) if self.total_amount else 0,
             'tax_amount': float(self.tax_amount) if self.tax_amount else 0,
+            'base_amount': float(self.base_amount) if self.base_amount else 0,
             'issue_date': self.issue_date.isoformat() if self.issue_date else None,
             'payment_form': self.payment_form,
             'payment_method': self.payment_method,
             'taxes': taxes_dict,
+            'items': [item.to_dict() for item in self.items],  # NEW: Include line items
             'created_at': self.created_at.isoformat()
         }
 
