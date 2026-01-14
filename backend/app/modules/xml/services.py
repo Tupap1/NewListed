@@ -169,17 +169,34 @@ def process_and_save_xml(file_storage):
     Returns status dict: {'status': 'success'|'skipped'|'error', 'msg': ...}
     """
     try:
+        logger.info(f"Reading file content for {file_storage.filename if hasattr(file_storage, 'filename') else 'unknown'}")
+        
+        # Reset file pointer to beginning (in case it was read before)
+        if hasattr(file_storage, 'seek'):
+            file_storage.seek(0)
+            
         content = file_storage.read()
+        
+        if not content:
+            logger.error("File content is empty")
+            return {'status': 'error', 'msg': 'Empty file'}
+        
+        logger.info(f"Parsing XML content ({len(content)} bytes)")
         data = parse_xml_invoice(content)
         
         if not data:
+            logger.error("Failed to parse XML - parse_xml_invoice returned None")
             return {'status': 'error', 'msg': 'Invalid XML structure or missing critical fields'}
+        
+        logger.info(f"XML parsed successfully, UUID: {data.get('uuid', 'N/A')[:12]}...")
             
         existing = Invoice.query.filter_by(uuid=data['uuid']).first()
         if existing:
+            logger.info(f"Invoice with UUID {data['uuid'][:12]}... already exists, skipping")
             return {'status': 'skipped', 'msg': 'UUID already exists'}
-            
+        
         # Create Invoice with new fields
+        logger.info("Creating new Invoice record")
         new_invoice = Invoice(
             uuid=data['uuid'],
             invoice_number=data.get('invoice_number'),  # NEW: Human-readable ID
@@ -197,27 +214,38 @@ def process_and_save_xml(file_storage):
         )
         
         db.session.add(new_invoice)
+        logger.info("Invoice added to session, flushing to get ID")
         db.session.flush()  # Flush to get the invoice.id
         
         # Create InvoiceItem children
         items_data = data.get('items', [])
-        for item_dict in items_data:
-            new_item = InvoiceItem(
-                invoice_id=new_invoice.id,
-                description=item_dict['description'],
-                quantity=item_dict['quantity'],
-                unit_price=item_dict['unit_price'],
-                total_line=item_dict['total_line']
-            )
-            db.session.add(new_item)
+        logger.info(f"Creating {len(items_data)} invoice items")
+        for idx, item_dict in enumerate(items_data):
+            try:
+                new_item = InvoiceItem(
+                    invoice_id=new_invoice.id,
+                    description=item_dict['description'],
+                    quantity=item_dict['quantity'],
+                    unit_price=item_dict['unit_price'],
+                    total_line=item_dict['total_line']
+                )
+                db.session.add(new_item)
+            except Exception as item_error:
+                logger.error(f"Error creating item {idx}: {str(item_error)}")
+                raise
         
+        logger.info("Committing transaction to database")
         db.session.commit()
+        logger.info(f"Invoice saved successfully with {len(items_data)} items")
         
         return {'status': 'success', 'msg': f"Saved with {len(items_data)} items"}
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error saving invoice: {e}")
+        logger.error(f"Error saving invoice: {str(e)}", exc_info=True)
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"Full traceback: {error_details}")
         return {'status': 'error', 'msg': str(e)}
 
 def export_invoices_to_excel():

@@ -37,11 +37,13 @@ export default defineConfig({
       usePolling: true
     },
     // Proxy only for development (production uses VITE_API_URL)
+    // Using direct IP to avoid IPv6 resolution issues in Docker
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://backend:5000',
+        target: 'http://172.20.0.3:5000',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        ws: true
       }
     }
   },

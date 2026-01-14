@@ -12,40 +12,66 @@ def index():
 
 @xml_bp.route('/upload', methods=['POST'])
 def upload_xmls():
-    if 'files' not in request.files:
-        return jsonify({"error": "No files part"}), 400
-        
-    files = request.files.getlist('files')
+    import logging
+    logger = logging.getLogger(__name__)
     
-    if not files or files[0].filename == '':
-         return jsonify({"error": "No selected files"}), 400
-
-    results = {
-        "uploaded": 0,
-        "skipped": 0,
-        "errors": 0,
-        "details": []
-    }
-
-    for file in files:
-        if not file.filename.lower().endswith('.xml'):
-            results["errors"] += 1
-            results["details"].append({"filename": file.filename, "status": "error", "msg": "Not an XML file"})
-            continue
+    try:
+        if 'files' not in request.files:
+            logger.error("No 'files' field in request.files")
+            return jsonify({"error": "No files part"}), 400
             
-        # Process
-        res = process_and_save_xml(file)
+        files = request.files.getlist('files')
+        logger.info(f"Received {len(files)} file(s) for upload")
         
-        if res['status'] == 'success':
-            results["uploaded"] += 1
-        elif res['status'] == 'skipped':
-            results["skipped"] += 1
-        else:
-            results["errors"] += 1
-            
-        results["details"].append({"filename": file.filename, "status": res['status'], "msg": res['msg']})
+        if not files or files[0].filename == '':
+            logger.error("Empty files list or no filename")
+            return jsonify({"error": "No selected files"}), 400
 
-    return jsonify(results), 200
+        results = {
+            "uploaded": 0,
+            "skipped": 0,
+            "errors": 0,
+            "details": []
+        }
+
+        for file in files:
+            logger.info(f"Processing file: {file.filename}")
+            
+            if not file.filename.lower().endswith('.xml'):
+                logger.warning(f"File {file.filename} is not an XML file")
+                results["errors"] += 1
+                results["details"].append({"filename": file.filename, "status": "error", "msg": "Not an XML file"})
+                continue
+                
+            # Process
+            try:
+                res = process_and_save_xml(file)
+                logger.info(f"File {file.filename} processed: {res['status']}")
+                
+                if res['status'] == 'success':
+                    results["uploaded"] += 1
+                elif res['status'] == 'skipped':
+                    results["skipped"] += 1
+                else:
+                    results["errors"] += 1
+                    
+                results["details"].append({"filename": file.filename, "status": res['status'], "msg": res['msg']})
+                
+            except Exception as file_error:
+                logger.error(f"Error processing file {file.filename}: {str(file_error)}", exc_info=True)
+                results["errors"] += 1
+                results["details"].append({
+                    "filename": file.filename, 
+                    "status": "error", 
+                    "msg": f"Processing error: {str(file_error)}"
+                })
+
+        logger.info(f"Upload complete: {results['uploaded']} uploaded, {results['skipped']} skipped, {results['errors']} errors")
+        return jsonify(results), 200
+        
+    except Exception as e:
+        logger.error(f"Unexpected error in upload_xmls: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 @xml_bp.route('/list', methods=['GET'])
 def list_invoices():
