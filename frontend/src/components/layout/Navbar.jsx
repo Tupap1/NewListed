@@ -1,48 +1,48 @@
-import { Link, useLocation } from 'react-router-dom';
-import { FileSpreadsheet, FileText, Home } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function Navbar() {
-    const location = useLocation();
-
-    const isActive = (path) => {
-        return location.pathname === path ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800';
-    };
+    const { isDark, toggleTheme } = useTheme();
 
     return (
-        <nav className="fixed top-0 left-0 h-screen w-64 bg-slate-900 border-r border-slate-800 flex flex-col p-4">
-            <div className="mb-8 px-2">
-                <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-                    NewListed
-                </h1>
-                <p className="text-xs text-slate-500 mt-1">Financial Intelligence</p>
-            </div>
+        <header className="fixed top-0 left-64 right-0 h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-10">
+            <div className="h-full px-6 flex items-center justify-between">
+                {/* Page Title / Breadcrumb */}
+                <div>
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                        Sistema de Gestión Contable
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Procesamiento inteligente para DIAN Colombia
+                    </p>
+                </div>
 
-            <div className="space-y-2 flex-1">
-                <Link to="/" className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${isActive('/')}`}>
-                    <Home size={20} />
-                    <span className="font-medium">Dashboard</span>
-                </Link>
-                <Link to="/excel" className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${isActive('/excel')}`}>
-                    <FileSpreadsheet size={20} />
-                    <span className="font-medium">Excel Processor</span>
-                </Link>
-                <Link to="/xml" className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${isActive('/xml')}`}>
-                    <FileText size={20} />
-                    <span className="font-medium">XML Vault</span>
-                </Link>
-            </div>
+                {/* Actions */}
+                <div className="flex items-center gap-4">
+                    {/* Theme Toggle */}
+                    <button
+                        onClick={toggleTheme}
+                        className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                        title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                    >
+                        {isDark ? (
+                            <Sun className="w-5 h-5 text-yellow-500" />
+                        ) : (
+                            <Moon className="w-5 h-5 text-slate-600" />
+                        )}
+                    </button>
 
-            <div className="mt-auto px-4 py-4 border-t border-slate-800">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">
-                        A
-                    </div>
-                    <div>
-                        <p className="text-sm font-medium text-slate-200">Admin</p>
-                        <p className="text-xs text-slate-500">System Ops</p>
+                    {/* User Info (Optional) */}
+                    <div className="text-right hidden sm:block">
+                        <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            Acceso Interno
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                            Sin autenticación
+                        </div>
                     </div>
                 </div>
             </div>
-        </nav>
+        </header>
     );
 }
