@@ -2,8 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-# added: libxml2-dev libxslt-dev for lxml, gcc for compilation
+# Install system dependencies for lxml and compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
@@ -13,13 +12,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application
+# Copy application code
 COPY . .
 
-# Expose port
+# Expose port (Railway will override with $PORT)
 EXPOSE 5000
 
-CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5000"]
+# Production server with Gunicorn
+# Railway provides PORT env var dynamically
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 4 --threads 2 --timeout 60 wsgi:app
