@@ -1,32 +1,43 @@
-import React from 'react';
-import FileUpload from './components/FileUpload';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Navbar from './components/layout/Navbar';
+import ExcelPage from './pages/ExcelPage';
+import XmlPage from './pages/XmlPage';
 
 function App() {
     return (
-        <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-            <div className="w-full max-w-4xl">
-                <header className="text-center mb-12">
-                    <h1 className="text-4xl font-semibold text-primary tracking-tight mb-2">
-                        CCNsoft Core
-                    </h1>
-                    <p className="text-slate-500 text-lg">
-                        Motor de Normalización Contable
-                    </p>
-                </header>
-
-                <main className="bg-white/50 backdrop-blur-sm shadow-xl shadow-slate-200/50 rounded-2xl p-8 sm:p-12 border border-white">
-                    <div className="max-w-xl mx-auto">
-                        <h2 className="text-xl font-medium text-slate-700 mb-6 text-center">Importar Factura Electrónica</h2>
-                        <FileUpload />
-                    </div>
+        <Router>
+            <div className="flex min-h-screen bg-slate-900 text-slate-100 font-sans">
+                <Navbar />
+                <main className="ml-64 flex-1 p-8">
+                    <Routes>
+                        <Route path="/" element={<Overview />} />
+                        <Route path="/excel" element={<ExcelPage />} />
+                        <Route path="/xml" element={<XmlPage />} />
+                    </Routes>
                 </main>
+            </div>
+        </Router>
+    );
+}
 
-                <footer className="mt-12 text-center text-sm text-slate-400">
-                    &copy; {new Date().getFullYear()} CCNsoft. Arquitectura Hexagonal Demo.
-                </footer>
+// Simple Home Placeholder
+function Overview() {
+    return (
+        <div className="flex flex-col items-center justify-center h-[70vh] text-center space-y-6 animate-fade-in">
+            <div className="relative">
+                <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-cyan-500 rounded-full blur opacity-25"></div>
+                <h1 className="relative text-5xl font-extrabold text-white">NewListed<span className="text-cyan-400">.</span></h1>
+            </div>
+            <p className="text-xl text-slate-400 max-w-lg">
+                The next-generation financial processing engine.
+                Manage your invoices and sanitize your Excel reports in seconds.
+            </p>
+            <div className="flex gap-4 mt-8">
+                <a href="/excel" className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors">Start Excel Job</a>
+                <a href="/xml" className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition-colors">View XML Vault</a>
             </div>
         </div>
-    );
+    )
 }
 
 export default App;

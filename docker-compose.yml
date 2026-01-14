@@ -1,12 +1,55 @@
 version: '3.8'
 
 services:
-  ccnsoft-core:
-    build: .
-    ports:
-      - "8000:8000"
-    volumes:
-      # Optional: persist the sqlite db if needed
-      - ./data:/app/data
+  db:
+    image: mysql:8.0
+    container_name: newlisted_db
+    restart: always
     environment:
-      - DATABASE_URL=sqlite:////app/data/test.db
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: newlisted_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: newlisted_backend
+    restart: always
+    environment:
+      DATABASE_URL: mysql+pymysql://user:password@db:3306/newlisted_db
+      FLASK_APP: app
+      FLASK_DEBUG: 1
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: node:18-alpine
+    container_name: newlisted_frontend
+    working_dir: /app
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev -- --host"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
