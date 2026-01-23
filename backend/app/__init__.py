@@ -7,10 +7,16 @@ def create_app():
     app = Flask(__name__)
     
     # Configuration
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
-        'DATABASE_URL', 
-        'mysql+pymysql://user:password@db:3306/newlisted_db'
-    )
+    # 1. Obtiene la URL de Railway (DATABASE_URL).
+    # 2. Si no existe (estamos en local), usa la conexión a 'db' por defecto.
+    database_url = os.getenv("DATABASE_URL", "mysql+pymysql://root:password@db:3306/pv")
+    
+    # FIX PARA SQLALCHEMY 1.4+ / 2.0
+    # Railway entrega la URL con el protocolo "mysql://", pero SQLAlchemy requiere el driver explícito "mysql+pymysql://"
+    if database_url and database_url.startswith("mysql://"):
+        database_url = database_url.replace("mysql://", "mysql+pymysql://", 1)
+    
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Initialize Extensions
