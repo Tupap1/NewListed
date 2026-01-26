@@ -22,7 +22,8 @@ export default defineConfig({
 
   // Development server configuration
   server: {
-    host: true,
+    host: true,      // Enables 0.0.0.0 for external connections (Railway requirement)
+    strictPort: true, // Forces port 5173, fails if unavailable (Railway requirement)
     port: 5173,
     // Allow ngrok and other custom hosts
     allowedHosts: [
