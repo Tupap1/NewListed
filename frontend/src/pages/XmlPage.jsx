@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../config/axios';
 import { RefreshCcw, CheckCircle, AlertTriangle, Download, Eye } from 'lucide-react';
 import FileUpload from '../components/ui/FileUpload';
 import DataTable from '../components/ui/DataTable';
 import InvoicePreview from '../components/ui/InvoicePreview';
+
 
 export default function XmlPage() {
     const [invoices, setInvoices] = useState([]);

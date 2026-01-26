@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import axios from 'axios';
+import axios from '../config/axios';
 import FileUpload from '../components/ui/FileUpload';
 import DataTable from '../components/ui/DataTable';
+
 
 export default function ExcelPage() {
     const [data, setData] = useState([]);
