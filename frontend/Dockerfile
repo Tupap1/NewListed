@@ -1,31 +1,26 @@
-# Multi-stage build for optimized production image
-
 # Stage 1: Build
 FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Declaramos ARG antes de cualquier cosa para asegurar que se tome
+ARG VITE_API_URL
+# Persistimos la variable para el build
+ENV VITE_API_URL=${VITE_API_URL}
+
 COPY package*.json ./
 RUN npm install
 
-# Copy source code
 COPY . .
 
-# Build for production
+# Imprimimos la variable para verla en los logs de Railway (Depuración)
+RUN echo "Building with API URL: $VITE_API_URL"
+
 RUN npm run build
 
-# Stage 2: Production with Nginx
+# Stage 2: Production
 FROM nginx:alpine
-
-# Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Expose port (Railway will use $PORT)
 EXPOSE 80
-
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
