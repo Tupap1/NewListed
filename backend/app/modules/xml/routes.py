@@ -107,3 +107,34 @@ def export_excel():
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@xml_bp.route('/<int:invoice_id>', methods=['DELETE'])
+def delete_invoice(invoice_id):
+    """
+    Delete an invoice by ID
+    """
+    import logging
+    from app.extensions import db
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        invoice = Invoice.query.get(invoice_id)
+        
+        if not invoice:
+            logger.warning(f"Invoice with ID {invoice_id} not found")
+            return jsonify({"error": "Factura no encontrada"}), 404
+        
+        logger.info(f"Deleting invoice ID {invoice_id} (UUID: {invoice.uuid[:12]}...)")
+        
+        # Delete invoice (cascade will delete related items automatically)
+        db.session.delete(invoice)
+        db.session.commit()
+        
+        logger.info(f"Invoice {invoice_id} deleted successfully")
+        return jsonify({"message": "Factura eliminada exitosamente"}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting invoice {invoice_id}: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Error al eliminar: {str(e)}"}), 500

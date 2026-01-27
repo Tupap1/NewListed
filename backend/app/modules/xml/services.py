@@ -253,76 +253,119 @@ def export_invoices_to_excel():
     Export all invoices from database to Excel file using pandas.
     FLATTENED FORMAT: Each row represents a LINE ITEM (not an invoice).
     Invoice header fields are repeated for each item.
+    
+    DYNAMIC TAX COLUMNS: Instead of a concatenated string, this function:
+    1. Parses all tax strings to identify unique tax rates in the dataset
+    2. Creates individual columns for each tax type found (e.g., "Valor IVA 19%", "Valor IVA 5%")
+    3. Only creates columns for taxes that exist - no empty columns
+    4. Fills the appropriate value for each invoice, or 0 if that tax doesn't apply
+    
     Returns a BytesIO buffer with the Excel file.
     """
     try:
         # Fetch all invoices with their items (eager loading)
         invoices = Invoice.query.order_by(Invoice.issue_date.desc()).all()
         
-        data_list = []
+        # STEP 1: Collect all unique tax types across all invoices
+        all_tax_keys = set()
         
         for inv in invoices:
-            # Parse taxes from JSON
-            taxes_str = ""
             if inv.json_taxes:
                 try:
                     taxes_dict = json.loads(inv.json_taxes)
-                    taxes_str = ", ".join([f"{k}: {v}" for k, v in taxes_dict.items()])
+                    all_tax_keys.update(taxes_dict.keys())
                 except:
-                    taxes_str = inv.json_taxes
+                    pass
+        
+        # Sort tax keys for consistent column ordering (e.g., IVA 0%, IVA 5%, IVA 19%)
+        sorted_tax_keys = sorted(all_tax_keys)
+        
+        logger.info(f"Found {len(sorted_tax_keys)} unique tax types: {sorted_tax_keys}")
+        
+        # STEP 2: Build data rows with dynamic tax columns
+        data_list = []
+        
+        for inv in invoices:
+            # Parse taxes for this invoice
+            invoice_taxes = {}
+            if inv.json_taxes:
+                try:
+                    invoice_taxes = json.loads(inv.json_taxes)
+                except:
+                    pass
+            
+            # Base row data (common to all items in this invoice)
+            base_row = {
+                'Número Factura': inv.invoice_number or inv.uuid[:12],
+                'Fecha': inv.issue_date.isoformat() if inv.issue_date else '',
+                'Emisor NIT': inv.issuer_nit or '',
+                'Emisor Nombre': inv.issuer_name or '',
+                'Receptor NIT': inv.receiver_nit or '',
+                'Receptor Nombre': inv.receiver_name or '',
+                'Forma Pago': inv.payment_form or '',
+                'Medio Pago': inv.payment_method or '',
+                'Total Factura': float(inv.total_amount) if inv.total_amount else 0,
+            }
+            
+            # Add dynamic tax columns - fill with actual value or 0
+            for tax_key in sorted_tax_keys:
+                column_name = f"Valor {tax_key}"
+                base_row[column_name] = float(invoice_taxes.get(tax_key, 0))
+            
+            # Add UUID at the end
+            base_row['UUID (CUFE)'] = inv.uuid
             
             # If invoice has items, create one row per item
             if inv.items:
                 for item in inv.items:
-                    data_list.append({
-                        'Número Factura': inv.invoice_number or inv.uuid[:12],  # Invoice Number first (fallback to short UUID)
-                        'Fecha': inv.issue_date.isoformat() if inv.issue_date else '',
-                        'Emisor NIT': inv.issuer_nit or '',
-                        'Emisor Nombre': inv.issuer_name or '',
-                        'Receptor NIT': inv.receiver_nit or '',
-                        'Receptor Nombre': inv.receiver_name or '',
-                        'Forma Pago': inv.payment_form or '',
-                        'Medio Pago': inv.payment_method or '',
-                        'Impuestos (Desglose)': taxes_str,
-                        'Total Factura': float(inv.total_amount) if inv.total_amount else 0,
-                        # Line item details
+                    row = base_row.copy()
+                    row.update({
                         'Descripción Ítem': item.description or '',
                         'Cantidad': float(item.quantity) if item.quantity else 0,
                         'Precio Unitario': float(item.unit_price) if item.unit_price else 0,
                         'Total Línea': float(item.total_line) if item.total_line else 0,
-                        'UUID (CUFE)': inv.uuid  # UUID moved to last column
                     })
+                    data_list.append(row)
             else:
                 # Invoice without items: create one row with empty item fields
-                data_list.append({
-                    'Número Factura': inv.invoice_number or inv.uuid[:12],
-                    'Fecha': inv.issue_date.isoformat() if inv.issue_date else '',
-                    'Emisor NIT': inv.issuer_nit or '',
-                    'Emisor Nombre': inv.issuer_name or '',
-                    'Receptor NIT': inv.receiver_nit or '',
-                    'Receptor Nombre': inv.receiver_name or '',
-                    'Forma Pago': inv.payment_form or '',
-                    'Medio Pago': inv.payment_method or '',
-                    'Impuestos (Desglose)': taxes_str,
-                    'Total Factura': float(inv.total_amount) if inv.total_amount else 0,
+                row = base_row.copy()
+                row.update({
                     'Descripción Ítem': '',
                     'Cantidad': 0,
                     'Precio Unitario': 0,
                     'Total Línea': 0,
-                    'UUID (CUFE)': inv.uuid
                 })
+                data_list.append(row)
         
+        # STEP 3: Define column order
+        # Fixed columns first, then dynamic tax columns, then item details, then UUID
+        fixed_columns_pre = [
+            'Número Factura', 'Fecha', 'Emisor NIT', 'Emisor Nombre',
+            'Receptor NIT', 'Receptor Nombre', 'Forma Pago', 'Medio Pago',
+            'Total Factura'
+        ]
+        
+        tax_columns = [f"Valor {tax_key}" for tax_key in sorted_tax_keys]
+        
+        item_columns = [
+            'Descripción Ítem', 'Cantidad', 'Precio Unitario', 'Total Línea'
+        ]
+        
+        fixed_columns_post = ['UUID (CUFE)']
+        
+        all_columns = fixed_columns_pre + tax_columns + item_columns + fixed_columns_post
+        
+        # STEP 4: Create DataFrame
         if not data_list:
             # Empty dataframe if no data
-            df = pd.DataFrame(columns=[
-                'Número Factura', 'Fecha', 'Emisor NIT', 'Emisor Nombre', 
-                'Receptor NIT', 'Receptor Nombre', 'Forma Pago', 'Medio Pago',
-                'Impuestos (Desglose)', 'Total Factura',
-                'Descripción Ítem', 'Cantidad', 'Precio Unitario', 'Total Línea',
-                'UUID (CUFE)'
-            ])
+            df = pd.DataFrame(columns=all_columns)
         else:
             df = pd.DataFrame(data_list)
+            # Ensure column order
+            df = df[all_columns]
+        
+        logger.info(f"Generated Excel with {len(df)} rows and {len(all_columns)} columns")
+        logger.info(f"Tax columns: {tax_columns}")
         
         # Create Excel file in memory
         output = io.BytesIO()

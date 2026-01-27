@@ -1,24 +1,26 @@
-# Railway Monorepo Configuration
-# This file defines two services: backend and frontend
+    # Railway Monorepo Configuration
+    # This file defines two services: backend and frontend
 
-# Backend Service
-[[services]]
-name = "backend"
-source = "backend"
-dockerfile = "backend/Dockerfile"
+    # Backend Service
+    [[services]]
+    name = "backend"
+    source = "backend"
+    dockerfile = "backend/Dockerfile"
 
-[services.healthcheck]
-path = "/api/xml/"
-timeout = 100
-interval = 60
+    [services.healthcheck]
+    path = "/api/xml/"
+    timeout = 100
+    interval = 60
 
-# Frontend Service
-[[services]]
-name = "frontend"
-source = "frontend"
-dockerfile = "frontend/Dockerfile"
+    # Frontend Service
+    [[services]]
+    name = "frontend"
+    source = "frontend"
+    dockerfile = "frontend/Dockerfile"
 
-[services.healthcheck]
-path = "/"
-timeout = 100
-interval = 60
+    [services.healthcheck]
+    path = "/"
+    timeout = 100
+    interval = 60
+
+

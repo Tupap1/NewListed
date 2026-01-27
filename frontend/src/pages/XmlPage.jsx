@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from '../config/axios';
-import { RefreshCcw, CheckCircle, AlertTriangle, Download, Eye } from 'lucide-react';
+import { RefreshCcw, CheckCircle, AlertTriangle, Download, Eye, Trash2 } from 'lucide-react';
 import FileUpload from '../components/ui/FileUpload';
 import DataTable from '../components/ui/DataTable';
 import InvoicePreview from '../components/ui/InvoicePreview';
@@ -77,6 +77,23 @@ export default function XmlPage() {
         }
     };
 
+    const handleDelete = async (invoiceId, invoiceNumber) => {
+        const confirmed = window.confirm(
+            `¿Estás seguro de eliminar la factura ${invoiceNumber || invoiceId}?\n\nEsta acción no se puede deshacer.`
+        );
+
+        if (!confirmed) return;
+
+        try {
+            await axios.delete(`/api/xml/${invoiceId}`);
+            alert("Factura eliminada exitosamente");
+            fetchInvoices(page); // Reload current page
+        } catch (err) {
+            console.error(err);
+            alert(err.response?.data?.error || "Error al eliminar la factura");
+        }
+    };
+
     const columns = [
         {
             header: "No. Factura",
@@ -144,6 +161,13 @@ export default function XmlPage() {
                         title="Ver factura"
                     >
                         <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => handleDelete(r.id, r.invoice_number || r.uuid?.substring(0, 12))}
+                        className="p-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-800/50 text-red-700 dark:text-red-400 rounded-lg transition-colors"
+                        title="Eliminar factura"
+                    >
+                        <Trash2 className="w-4 h-4" />
                     </button>
                 </div>
             )
