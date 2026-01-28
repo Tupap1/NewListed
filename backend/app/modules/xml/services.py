@@ -125,7 +125,7 @@ def parse_xml_invoice(file_content):
         
         json_taxes = json.dumps(taxes_dict) if taxes_dict else None
 
-        # 7. NEW: Line Items (Invoice Lines)
+        # 7. NEW: Line Items (Invoice Lines) - CRITICAL FIX: Extract taxes PER LINE
         items = []
         invoice_lines = tree.xpath(".//cac:InvoiceLine", namespaces=NAMESPACES)
         for line in invoice_lines:
@@ -134,11 +134,28 @@ def parse_xml_invoice(file_content):
             unit_price = get_text(".//cac:Price/cbc:PriceAmount", node=line)
             total_line = get_text(".//cbc:LineExtensionAmount", node=line)
             
+            # CRITICAL FIX: Extract taxes for THIS specific line (not from invoice header)
+            line_taxes = {}
+            # Each InvoiceLine has its own cac:TaxTotal/cac:TaxSubtotal
+            line_tax_subtotals = line.xpath(".//cac:TaxTotal/cac:TaxSubtotal", namespaces=NAMESPACES)
+            for subtotal in line_tax_subtotals:
+                tax_name = get_text(".//cac:TaxCategory/cac:TaxScheme/cbc:Name", node=subtotal)
+                tax_percent = get_text(".//cac:TaxCategory/cbc:Percent", node=subtotal)
+                tax_value = get_text(".//cbc:TaxAmount", node=subtotal)
+                
+                if tax_name and tax_value:
+                    # Create key like "IVA 19%" or just tax name if no percent
+                    key = f"{tax_name} {tax_percent}%" if tax_percent else tax_name
+                    line_taxes[key] = float(tax_value)
+            
+            json_line_taxes = json.dumps(line_taxes) if line_taxes else None
+            
             items.append({
                 "description": description or "Sin descripción",
                 "quantity": float(quantity) if quantity else 0,
                 "unit_price": float(unit_price) if unit_price else 0,
-                "total_line": float(total_line) if total_line else 0
+                "total_line": float(total_line) if total_line else 0,
+                "json_taxes": json_line_taxes  # NEW: Tax info for this specific item
             })
 
         return {
@@ -227,7 +244,8 @@ def process_and_save_xml(file_storage):
                     description=item_dict['description'],
                     quantity=item_dict['quantity'],
                     unit_price=item_dict['unit_price'],
-                    total_line=item_dict['total_line']
+                    total_line=item_dict['total_line'],
+                    json_taxes=item_dict.get('json_taxes')  # NEW: Tax info per item
                 )
                 db.session.add(new_item)
             except Exception as item_error:
@@ -254,11 +272,17 @@ def export_invoices_to_excel():
     FLATTENED FORMAT: Each row represents a LINE ITEM (not an invoice).
     Invoice header fields are repeated for each item.
     
-    DYNAMIC TAX COLUMNS: Instead of a concatenated string, this function:
-    1. Parses all tax strings to identify unique tax rates in the dataset
+    DYNAMIC TAX COLUMNS - CRITICAL FIX: Taxes are now extracted from ITEMS, not invoices.
+    1. Scans all ITEMS (not invoices) to identify unique tax rates in the dataset
     2. Creates individual columns for each tax type found (e.g., "Valor IVA 19%", "Valor IVA 5%")
     3. Only creates columns for taxes that exist - no empty columns
-    4. Fills the appropriate value for each invoice, or 0 if that tax doesn't apply
+    4. Each row shows ONLY the taxes for THAT specific item (sparse matrix)
+    
+    Example:
+    Item       | Base   | Valor IVA 19% | Valor IVA 5%
+    ------------------------------------------------
+    Gaseosa    | 2000   | 380           | 0
+    Papas      | 1000   | 0             | 50
     
     Returns a BytesIO buffer with the Excel file.
     """
@@ -266,58 +290,51 @@ def export_invoices_to_excel():
         # Fetch all invoices with their items (eager loading)
         invoices = Invoice.query.order_by(Invoice.issue_date.desc()).all()
         
-        # STEP 1: Collect all unique tax types across all invoices
+        # STEP 1: Collect all unique tax types across all ITEMS (not invoices)
         all_tax_keys = set()
         
         for inv in invoices:
-            if inv.json_taxes:
-                try:
-                    taxes_dict = json.loads(inv.json_taxes)
-                    all_tax_keys.update(taxes_dict.keys())
-                except:
-                    pass
+            for item in inv.items:
+                if item.json_taxes:
+                    try:
+                        item_taxes_dict = json.loads(item.json_taxes)
+                        all_tax_keys.update(item_taxes_dict.keys())
+                    except:
+                        pass
         
         # Sort tax keys for consistent column ordering (e.g., IVA 0%, IVA 5%, IVA 19%)
         sorted_tax_keys = sorted(all_tax_keys)
         
-        logger.info(f"Found {len(sorted_tax_keys)} unique tax types: {sorted_tax_keys}")
+        logger.info(f"Found {len(sorted_tax_keys)} unique tax types in ITEMS: {sorted_tax_keys}")
         
-        # STEP 2: Build data rows with dynamic tax columns
+        # STEP 2: Build data rows with dynamic tax columns PER ITEM
         data_list = []
         
         for inv in invoices:
-            # Parse taxes for this invoice
-            invoice_taxes = {}
-            if inv.json_taxes:
-                try:
-                    invoice_taxes = json.loads(inv.json_taxes)
-                except:
-                    pass
-            
-            # Base row data (common to all items in this invoice)
+            # Base row data (common invoice header fields)
             base_row = {
                 'Número Factura': inv.invoice_number or inv.uuid[:12],
                 'Fecha': inv.issue_date.isoformat() if inv.issue_date else '',
                 'Emisor NIT': inv.issuer_nit or '',
                 'Emisor Nombre': inv.issuer_name or '',
-                'Receptor NIT': inv.receiver_nit or '',
+                'Receptor NIT': inv.receptor_nit or '',
                 'Receptor Nombre': inv.receiver_name or '',
                 'Forma Pago': inv.payment_form or '',
                 'Medio Pago': inv.payment_method or '',
                 'Total Factura': float(inv.total_amount) if inv.total_amount else 0,
             }
             
-            # Add dynamic tax columns - fill with actual value or 0
-            for tax_key in sorted_tax_keys:
-                column_name = f"Valor {tax_key}"
-                base_row[column_name] = float(invoice_taxes.get(tax_key, 0))
-            
-            # Add UUID at the end
-            base_row['UUID (CUFE)'] = inv.uuid
-            
             # If invoice has items, create one row per item
             if inv.items:
                 for item in inv.items:
+                    # Parse THIS item's specific taxes
+                    item_taxes = {}
+                    if item.json_taxes:
+                        try:
+                            item_taxes = json.loads(item.json_taxes)
+                        except:
+                            pass
+                    
                     row = base_row.copy()
                     row.update({
                         'Descripción Ítem': item.description or '',
@@ -325,6 +342,16 @@ def export_invoices_to_excel():
                         'Precio Unitario': float(item.unit_price) if item.unit_price else 0,
                         'Total Línea': float(item.total_line) if item.total_line else 0,
                     })
+                    
+                    # CRITICAL FIX: Add tax columns for THIS ITEM ONLY (sparse matrix)
+                    for tax_key in sorted_tax_keys:
+                        column_name = f"Valor {tax_key}"
+                        # If this item has this tax, use its value; otherwise 0
+                        row[column_name] = float(item_taxes.get(tax_key, 0))
+                    
+                    # Add UUID at the end
+                    row['UUID (CUFE)'] = inv.uuid
+                    
                     data_list.append(row)
             else:
                 # Invoice without items: create one row with empty item fields
@@ -335,6 +362,13 @@ def export_invoices_to_excel():
                     'Precio Unitario': 0,
                     'Total Línea': 0,
                 })
+                
+                # Add empty tax columns
+                for tax_key in sorted_tax_keys:
+                    column_name = f"Valor {tax_key}"
+                    row[column_name] = 0
+                
+                row['UUID (CUFE)'] = inv.uuid
                 data_list.append(row)
         
         # STEP 3: Define column order

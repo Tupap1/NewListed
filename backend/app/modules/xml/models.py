@@ -73,13 +73,23 @@ class InvoiceItem(db.Model):
     quantity = db.Column(db.Numeric(18, 4), default=0.0)
     unit_price = db.Column(db.Numeric(18, 2), default=0.0)
     total_line = db.Column(db.Numeric(18, 2), default=0.0)
+    # NEW: Tax information at LINE level (not invoice level)
+    json_taxes = db.Column(db.Text, nullable=True)  # JSON: {"IVA 19%": 380, "INC 8%": 50}
     
     def to_dict(self):
+        taxes_dict = {}
+        if self.json_taxes:
+            try:
+                taxes_dict = json.loads(self.json_taxes)
+            except:
+                pass
+                
         return {
             'id': self.id,
             'invoice_id': self.invoice_id,
             'description': self.description,
             'quantity': float(self.quantity) if self.quantity else 0,
             'unit_price': float(self.unit_price) if self.unit_price else 0,
-            'total_line': float(self.total_line) if self.total_line else 0
+            'total_line': float(self.total_line) if self.total_line else 0,
+            'taxes': taxes_dict  # NEW: Tax breakdown per item
         }
